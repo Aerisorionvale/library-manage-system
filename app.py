@@ -1,12 +1,6 @@
 import streamlit as st
 import pandas as pd
-from db_api import (
-    add_book, search_book, update_book, delete_book,
-    add_reader, search_reader, delete_reader,
-    borrow_book, return_book,
-    get_borrow_count, stock_by_category, get_book_ranking,
-    get_db_conn
-)
+from db_api import get_db_conn
 
 # 页面基础配置
 st.set_page_config(page_title="图书管理系统", layout="wide")
