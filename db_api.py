@@ -8,7 +8,7 @@ def get_db_conn():
         port=4000,
         user="24z8GsoRjnBAuA2.root",
         password="g6t2cEouIXIg4CXi",
-        database="library_system",
+        database="library_db",
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor
     )
