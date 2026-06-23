@@ -2,77 +2,69 @@ import streamlit as st
 import pandas as pd
 from db_api import get_db_conn
 
-# 页面基础配置
+# 页面基础设置
 st.set_page_config(page_title="图书管理系统", layout="wide")
 st.title("📚 图书管理系统（TiDB云端版）")
 
-# 封装函数：每次操作单独获取连接+游标，用完关闭
+# 封装获取连接函数
 def get_cursor():
     conn = get_db_conn()
     cur = conn.cursor()
     return conn, cur
 
-# 侧边栏4个功能板块
+# 侧边栏菜单
 menu = st.sidebar.selectbox("功能菜单", ["图书管理", "读者管理", "借阅管理", "数据统计"])
 
-# ========== 1.图书管理（图书查询 + 新增图书双标签） ==========
+# ========== 图书管理模块 ==========
 if menu == "图书管理":
     tab_search, tab_add = st.tabs(["图书查询", "新增图书"])
 
     # 图书查询
     with tab_search:
         st.subheader("图书信息查询")
-        search_key = st.text_input("输入图书名称/编号搜索")
+        keyword = st.text_input("输入图书名称/编号搜索")
         if st.button("查询"):
             conn, cur = get_cursor()
             try:
-                if search_key:
-                    sql = """
-                    SELECT b.book_id 图书编号,b.title 书名,b.author 作者,c.category_name 分类,
-                           b.stock 库存,b.publisher 出版社
-                    FROM books b LEFT JOIN category c ON b.category_id = c.category_id
-                    WHERE b.book_id LIKE %s OR b.title LIKE %s
-                    """
-                    cur.execute(sql, (f"%{search_key}%", f"%{search_key}%"))
-                else:
-                    sql = """
-                    SELECT b.book_id 图书编号,b.title 书名,b.author 作者,c.category_name 分类,
-                           b.stock 库存,b.publisher 出版社
-                    FROM books b LEFT JOIN category c ON b.category_id = c.category_id
-                    """
-                    cur.execute(sql)
+                sql = """
+                SELECT b.book_id 图书编号,b.title 书名,b.author 作者,c.category_name 分类,b.stock 库存,b.publisher 出版社
+                FROM books b LEFT JOIN category c ON b.category_id = c.category_id
+                WHERE b.book_id LIKE %s OR b.title LIKE %s
+                """
+                cur.execute(sql, (f"%{keyword}%", f"%{keyword}%"))
                 res = cur.fetchall()
-                col = [i[0] for i in cur.description]
-                df = pd.DataFrame(res, columns=col)
-                st.dataframe(df, use_container_width=True)
+                if res:
+                    df = pd.DataFrame(res, columns=[desc[0] for desc in cur.description])
+                    st.dataframe(df, use_container_width=True)
+                else:
+                    st.info("未查询到匹配图书")
             finally:
                 cur.close()
                 conn.close()
 
-    # 新增图书（全部缩进正确，兼容分类为空）
+    # 新增图书（加容错判断，根治KeyError）
     with tab_add:
         st.subheader("添加新图书")
         conn, cur = get_cursor()
-        cate_dict = {}
+        cate_list = []
         try:
-            c_sql = "SELECT category_id,category_name FROM category"
-            cur.execute(c_sql)
+            cur.execute("SELECT category_id, category_name FROM category")
             cate_list = cur.fetchall()
-            if cate_list:
-                cate_dict = {i[1]: i[0] for i in cate_list}
         finally:
             cur.close()
             conn.close()
 
-        if not cate_dict:
-            st.warning("暂无图书分类，请先在数据库添加分类数据！")
+        if not cate_list:
+            st.error("数据库暂无分类，请先到TiDB执行分类插入SQL！")
         else:
+            cate_dict = {row[1]: row[0] for row in cate_list}
             cate_name = st.selectbox("图书分类", list(cate_dict.keys()))
             book_id = st.text_input("图书编号")
             title = st.text_input("图书名称")
             author = st.text_input("作者")
             stock = st.number_input("库存数量", min_value=1, value=1)
             pub = st.text_input("出版社")
+
             if st.button("提交新增"):
                 conn, cur = get_cursor()
                 try:
@@ -83,7 +75,7 @@ if menu == "图书管理":
                     """
                     cur.execute(insert_sql, (book_id, title, author, cid, stock, pub))
                     conn.commit()
-                    st.success("图书新增成功！")
+                    st.success("✅ 图书新增成功！")
                 except Exception as e:
                     conn.rollback()
                     st.error(f"新增失败：{e}")
@@ -91,31 +83,31 @@ if menu == "图书管理":
                     cur.close()
                     conn.close()
 
-# ========== 2.读者管理（修复表字段不匹配bug） ==========
+# ========== 读者管理 ==========
 elif menu == "读者管理":
-    tab1, tab2 = st.tabs(["读者列表", "新增读者"])
-    # 查看全部读者
-    with tab1:
+    tab_view, tab_add_reader = st.tabs(["全部读者", "新增读者"])
+    with tab_view:
+        st.subheader("读者列表")
         conn, cur = get_cursor()
         try:
             cur.execute("SELECT * FROM readers")
-            reader_data = cur.fetchall()
-            reader_col = [i[0] for i in cur.description]
-            st.dataframe(pd.DataFrame(reader_data, columns=reader_col), use_container_width=True)
+            data = cur.fetchall()
+            df = pd.DataFrame(data, columns=[d[0] for d in cur.description])
+            st.dataframe(df, use_container_width=True)
         finally:
             cur.close()
             conn.close()
-    # 新增读者
-    with tab2:
+    with tab_add_reader:
+        st.subheader("新增读者")
         rid = st.text_input("读者编号")
         rname = st.text_input("读者姓名")
-        rtype = st.text_input("读者类型")
+        rtype = st.text_input("读者类型/班级")
         phone = st.text_input("联系电话")
         if st.button("添加读者"):
             conn, cur = get_cursor()
             try:
-                ins_sql = "INSERT INTO readers(reader_id,reader_name,reader_type,phone) VALUES(%s,%s,%s,%s)"
-                cur.execute(ins_sql, (rid, rname, rtype, phone))
+                cur.execute("INSERT INTO readers(reader_id,reader_name,reader_type,phone) VALUES(%s,%s,%s,%s)",
+                            (rid, rname, rtype, phone))
                 conn.commit()
                 st.success("读者添加完成")
             except Exception as e:
@@ -125,84 +117,85 @@ elif menu == "读者管理":
                 cur.close()
                 conn.close()
 
-# ========== 3.借阅管理 ==========
+# ========== 借阅管理 ==========
 elif menu == "借阅管理":
-    tab1, tab2 = st.tabs(["借阅记录", "图书借阅"])
-    # 全部借阅记录
-    with tab1:
+    tab_record, tab_borrow = st.tabs(["借阅记录", "办理借书"])
+    with tab_record:
+        st.subheader("全部借阅记录")
         conn, cur = get_cursor()
         try:
-            borrow_sql = """
-            SELECT br.record_id, r.reader_name 读者, b.title 图书, br.borrow_date 借出日期,
-                   br.due_date 应还日期, br.return_date 归还日期, br.status
+            sql = """
+            SELECT br.record_id, r.reader_name, b.title, br.borrow_date, br.due_date, br.return_date, br.status
             FROM borrow_records br
-            LEFT JOIN readers r ON br.reader_id = r.reader_id
-            LEFT JOIN books b ON br.book_id = b.book_id
+            LEFT JOIN readers r ON br.reader_id=r.reader_id
+            LEFT JOIN books b ON br.book_id=b.book_id
             """
-            cur.execute(borrow_sql)
-            borrow_data = cur.fetchall()
-            borrow_col = [i[0] for i in cur.description]
-            st.dataframe(pd.DataFrame(borrow_data, columns=borrow_col), use_container_width=True)
+            cur.execute(sql)
+            res = cur.fetchall()
+            df = pd.DataFrame(res, columns=[d[0] for d in cur.description])
+            st.dataframe(df, use_container_width=True)
         finally:
             cur.close()
             conn.close()
-    # 借书操作
-    with tab2:
+    with tab_borrow:
+        st.subheader("借书操作")
         conn, cur = get_cursor()
+        r_list = []
+        b_list = []
         try:
             cur.execute("SELECT reader_id,reader_name FROM readers")
-            r_all = cur.fetchall()
-            r_select = {f"{i[0]} {i[1]}": i[0] for i in r_all}
+            r_list = cur.fetchall()
             cur.execute("SELECT book_id,title FROM books WHERE stock>0")
-            b_all = cur.fetchall()
-            b_select = {f"{i[0]} {i[1]}": i[0] for i in b_all}
+            b_list = cur.fetchall()
         finally:
             cur.close()
             conn.close()
+        if r_list and b_list:
+            r_dict = {i[1]:i[0] for i in r_list}
+            b_dict = {i[1]:i[0] for i in b_list}
+            sel_r = st.selectbox("选择读者", list(r_dict.keys()))
+            sel_b = st.selectbox("选择图书", list(b_dict.keys()))
+            days = st.number_input("借阅天数", min_value=7, value=30)
+            if st.button("确认借书"):
+                from datetime import date, timedelta
+                today = date.today()
+                due = today + timedelta(days=days)
+                conn, cur = get_cursor()
+                try:
+                    cur.execute("""
+                    INSERT INTO borrow_records(reader_id,book_id,borrow_date,due_date,status)
+                    VALUES(%s,%s,%s,%s,0)
+                    """, (r_dict[sel_r], b_dict[sel_b], today, due))
+                    cur.execute("UPDATE books SET stock=stock-1 WHERE book_id=%s", (b_dict[sel_b],))
+                    conn.commit()
+                    st.success("借书成功！")
+                except Exception as e:
+                    conn.rollback()
+                    st.error(f"失败：{e}")
+                finally:
+                    cur.close()
+                    conn.close()
+        else:
+            st.warning("请先录入读者和可借阅图书")
 
-        sel_r = st.selectbox("选择读者", list(r_select.keys()))
-        sel_b = st.selectbox("选择借阅图书", list(b_select.keys()))
-        due_day = st.number_input("借阅天数", min_value=7, value=30)
-        if st.button("确认借阅"):
-            rid = r_select[sel_r]
-            bid = b_select[sel_b]
-            conn, cur = get_cursor()
-            try:
-                borrow_sql = """
-                INSERT INTO borrow_records(reader_id,book_id,borrow_date,due_date,status)
-                VALUES(%s,%s,CURRENT_DATE(),DATE_ADD(CURRENT_DATE(),INTERVAL %s DAY),0)
-                """
-                stock_sql = "UPDATE books SET stock=stock-1 WHERE book_id=%s"
-                cur.execute(borrow_sql, (rid, bid, due_day))
-                cur.execute(stock_sql, (bid,))
-                conn.commit()
-                st.success("借阅登记成功！")
-            except Exception as e:
-                conn.rollback()
-                st.error(f"操作失败：{e}")
-            finally:
-                cur.close()
-                conn.close()
-
-# ========== 4.数据统计 ==========
+# ========== 数据统计 ==========
 elif menu == "数据统计":
     st.subheader("系统数据统计")
     conn, cur = get_cursor()
     try:
         cur.execute("SELECT COUNT(*) FROM books")
-        book_total = cur.fetchone()[0]
+        book_num = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM readers")
-        reader_total = cur.fetchone()[0]
+        reader_num = cur.fetchone()[0]
         cur.execute("SELECT COUNT(*) FROM borrow_records WHERE status=0")
-        borrow_out = cur.fetchone()[0]
+        borrow_num = cur.fetchone()[0]
+        col1,col2,col3 = st.columns(3)
+        with col1:
+            st.metric("图书总数", book_num)
+        with col2:
+            st.metric("读者总数", reader_num)
+        with col3:
+            st.metric("在借图书", borrow_num)
     finally:
         cur.close()
         conn.close()
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("图书总数量", book_total)
-    with col2:
-        st.metric("读者总数", reader_total)
-    with col3:
-        st.metric("当前借出图书", borrow_out)
