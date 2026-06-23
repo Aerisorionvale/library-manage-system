@@ -18,7 +18,6 @@ def get_db_conn():
         charset="utf8mb4",
         connection_timeout=10,
         autocommit=False,
-        ssl_disabled=False  # 启用 SSL 但不强制验证证书
     )
     return conn
 
