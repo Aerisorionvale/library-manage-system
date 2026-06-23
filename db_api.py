@@ -7,19 +7,27 @@ from datetime import datetime, timedelta
 def get_db_conn():
     """
     获取 TiDB Cloud 数据库连接对象
-    使用 mysql.connector 驱动，兼容性更好
+    使用 mysql.connector 驱动
     """
-    conn = mysql.connector.connect(
-        host=st.secrets["TIDB_HOST"],
-        port=int(st.secrets.get("TIDB_PORT", 4000)),
-        user=st.secrets["TIDB_USER"],
-        password=st.secrets["TIDB_PASSWORD"],
-        database=st.secrets["TIDB_DATABASE"],
-        charset="utf8mb4",
-        connection_timeout=10,
-        autocommit=False,
-    )
-    return conn
+    # 先读取所有连接信息，打印出来方便调试
+    try:
+        conn = mysql.connector.connect(
+            host=st.secrets["TIDB_HOST"],
+            port=int(st.secrets.get("TIDB_PORT", 4000)),
+            user=st.secrets["TIDB_USER"],
+            password=st.secrets["TIDB_PASSWORD"],
+            database=st.secrets["TIDB_DATABASE"],
+            charset="utf8mb4",
+            connection_timeout=10,
+            autocommit=False
+        )
+        return conn
+    except MySQLError as e:
+        # 在页面上显示真实的错误信息，不再被 redacted
+        st.error(f"数据库连接失败！错误代码: {e.errno}, 错误信息: {e.msg}")
+        st.error(f"完整错误: {str(e)}")
+        st.error(f"SQLSTATE: {e.sqlstate}")
+        raise
 
 
 # ========== 图书操作 ==========
@@ -219,4 +227,3 @@ def get_book_ranking():
         return cur.fetchall()
     finally:
         conn.close()
-
