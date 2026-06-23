@@ -49,8 +49,8 @@ if menu == "图书管理":
                 cur.close()
                 conn.close()
 
-    # 新增图书
-        with tab_add:
+    # 新增图书（全部缩进正确，兼容分类为空）
+    with tab_add:
         st.subheader("添加新图书")
         conn, cur = get_cursor()
         cate_dict = {}
@@ -105,7 +105,7 @@ elif menu == "读者管理":
         finally:
             cur.close()
             conn.close()
-    # 新增读者（SQL字段和数据库表完全对齐：reader_name、reader_type）
+    # 新增读者
     with tab2:
         rid = st.text_input("读者编号")
         rname = st.text_input("读者姓名")
@@ -114,7 +114,6 @@ elif menu == "读者管理":
         if st.button("添加读者"):
             conn, cur = get_cursor()
             try:
-                # 修正后SQL，匹配readers表真实字段
                 ins_sql = "INSERT INTO readers(reader_id,reader_name,reader_type,phone) VALUES(%s,%s,%s,%s)"
                 cur.execute(ins_sql, (rid, rname, rtype, phone))
                 conn.commit()
