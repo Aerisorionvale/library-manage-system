@@ -1,8 +1,19 @@
 import pymysql
-import streamlit as st                   
+import ssl
+import streamlit as st
 from datetime import datetime, timedelta
 
+
 def get_db_conn():
+    """
+    获取 TiDB Cloud 数据库连接对象
+    连接信息从 Streamlit secrets 读取，部署时在 Streamlit Cloud 后台配置
+    """
+    # 创建兼容 TiDB Cloud 的 SSL 上下文
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
+
     conn = pymysql.connect(
         host=st.secrets["TIDB_HOST"],
         port=int(st.secrets.get("TIDB_PORT", 4000)),
@@ -11,8 +22,11 @@ def get_db_conn():
         database=st.secrets["TIDB_DATABASE"],
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
-        ssl={"ca": None})
+        ssl=ssl_ctx,
+        connect_timeout=10
+    )
     return conn
+
 
 # ========== 图书模块 F01-F04 ==========
 def add_book(book_id, title, author, category_id, stock, publisher):
