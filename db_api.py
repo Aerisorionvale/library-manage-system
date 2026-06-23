@@ -4,10 +4,10 @@ from datetime import datetime, timedelta
 def get_db_conn():
     """TiDB云端数据库连接"""
     conn = pymysql.connect(
-        host="你的TiDB Host地址",
+        host="gateway01.ap-southeast-1.prod.alicloud.tidbcloud.com",
         port=4000,
-        user="你的TiDB用户名",
-        password="你的TiDB密码",
+        user="24z8GsoRjnBAuA2.root",
+        password="g6t2cEouIXIg4CXi",
         database="library_system",
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor
