@@ -2,24 +2,19 @@ import streamlit as st
 import pandas as pd
 from db_api import get_db_conn
 
-# 页面基础配置
 st.set_page_config(page_title="图书管理系统", layout="wide")
 st.title("📚 图书管理系统（TiDB云端版）")
 
-# 获取数据库游标封装
 def get_cursor():
     conn = get_db_conn()
     cur = conn.cursor()
     return conn, cur
 
-# 侧边栏功能菜单
 menu = st.sidebar.selectbox("功能菜单", ["图书管理", "读者管理", "借阅管理", "数据统计"])
 
-# ---------------------- 图书管理模块 ----------------------
 if menu == "图书管理":
     tab_search, tab_add = st.tabs(["图书查询", "新增图书"])
 
-    # 图书查询页面
     with tab_search:
         st.subheader("图书信息查询")
         search_key = st.text_input("输入图书名称/编号搜索")
@@ -44,10 +39,8 @@ if menu == "图书管理":
                 cur.close()
                 conn.close()
 
-    # 新增图书页面（带空判断，彻底解决KeyError）
-       with tab_add:
+    with tab_add:
         st.subheader("添加新图书")
-        # 直接写死你全部分类，不再从数据库读取，彻底避开cate_dict报错
         cate_dict = {
             "计算机":"C01",
             "文学":"C02",
@@ -82,25 +75,7 @@ if menu == "图书管理":
             finally:
                 cur.close()
                 conn.close()
-            if st.button("提交新增"):
-                conn, cur = get_cursor()
-                try:
-                    cid = cate_dict[cate_name]
-                    insert_sql = """
-                    INSERT INTO books(book_id,title,author,category_id,stock,publisher)
-                    VALUES(%s,%s,%s,%s,%s,%s)
-                    """
-                    cur.execute(insert_sql, (book_id, title, author, cid, stock, publisher))
-                    conn.commit()
-                    st.success("✅ 图书新增成功！")
-                except Exception as e:
-                    conn.rollback()
-                    st.error(f"新增失败：{e}")
-                finally:
-                    cur.close()
-                    conn.close()
 
-# ---------------------- 读者管理模块 ----------------------
 elif menu == "读者管理":
     tab_list, tab_add_reader = st.tabs(["读者列表", "新增读者"])
     with tab_list:
@@ -134,7 +109,6 @@ elif menu == "读者管理":
                 cur.close()
                 conn.close()
 
-# ---------------------- 借阅管理模块 ----------------------
 elif menu == "借阅管理":
     tab_record, tab_borrow = st.tabs(["借阅记录", "办理借书"])
     with tab_record:
@@ -197,7 +171,6 @@ elif menu == "借阅管理":
         else:
             st.warning("请先录入读者和有库存的图书！")
 
-# ---------------------- 数据统计模块 ----------------------
 elif menu == "数据统计":
     st.subheader("系统数据总统计")
     conn, cur = get_cursor()
