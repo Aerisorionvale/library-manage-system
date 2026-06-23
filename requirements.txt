@@ -1,2 +1,2 @@
-streamlit>=1.30.0
-mysql-connector-python>=8.0.0
+streamlit
+pymysql
