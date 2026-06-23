@@ -1,16 +1,17 @@
 import pymysql
+import streamlit as st                   
 from datetime import datetime, timedelta
 
 def get_db_conn():
-    """TiDB云端数据库连接"""
     conn = pymysql.connect(
-        host="gateway01.ap-southeast-1.prod.alicloud.tidbcloud.com",
-        port=4000,
-        user="24z8GsoRjnBAuA2.root",
-        password="g6t2cEouIXIg4CXi"
-        database="library_system",
+        host=st.secrets["TIDB_HOST"],
+        port=int(st.secrets.get("TIDB_PORT", 4000)),
+        user=st.secrets["TIDB_USER"],
+        password=st.secrets["TIDB_PASSWORD"],
+        database=st.secrets["TIDB_DATABASE"],
         charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor
+        cursorclass=pymysql.cursors.DictCursor,
+        ssl={"verify_cert": True, "verify_identity": True}   # TiDB Cloud 强制 SSL
     )
     return conn
 
