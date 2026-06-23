@@ -1,102 +1,229 @@
+import mysql.connector
+from mysql.connector import Error as MySQLError
 import streamlit as st
-from datetime import datetime
-# 仅导入需求规定的基础函数，无拓展函数
-from db_api import (
-    add_book, search_book, update_book, delete_book,
-    add_reader, search_reader, delete_reader,
-    borrow_book, return_book,
-    get_borrow_count, stock_by_category, get_book_ranking
-)
+from datetime import datetime, timedelta
 
-st.set_page_config(page_title="图书馆管理系统", layout="wide")
-st.title("图书馆管理系统")
 
-# F12 侧边栏页面切换
-menu = st.sidebar.selectbox("功能导航", ["图书管理", "读者管理", "借还操作", "数据统计"])
+def get_db_conn():
+    """
+    获取 TiDB Cloud 数据库连接对象
+    使用 mysql.connector 驱动
+    """
+    # 先读取所有连接信息，打印出来方便调试
+    try:
+        conn = mysql.connector.connect(
+            host=st.secrets["TIDB_HOST"],
+            port=int(st.secrets.get("TIDB_PORT", 4000)),
+            user=st.secrets["TIDB_USER"],
+            password=st.secrets["TIDB_PASSWORD"],
+            database=st.secrets["TIDB_DATABASE"],
+            charset="utf8mb4",
+            connection_timeout=10,
+            autocommit=False
+        )
+        return conn
+    except MySQLError as e:
+        # 在页面上显示真实的错误信息，不再被 redacted
+        st.error(f"数据库连接失败！错误代码: {e.errno}, 错误信息: {e.msg}")
+        st.error(f"完整错误: {str(e)}")
+        st.error(f"SQLSTATE: {e.sqlstate}")
+        raise
 
-# F01-F04 图书管理
-if menu == "图书管理":
-    st.subheader("图书管理")
-    tab1, tab2, tab3 = st.tabs(["新增图书F01", "查询/修改F02/F03", "删除图书F04"])
-    with tab1:
-        bid = st.text_input("书号")
-        title = st.text_input("书名")
-        author = st.text_input("作者")
-        cid = st.text_input("分类编号")
-        stock = st.number_input("库存", min_value=0)
-        pub = st.text_input("出版社")
-        if st.button("新增图书"):
-            res = add_book(bid, title, author, cid, stock, pub)
-            st.success("新增成功") if res else st.error("新增失败")
-    with tab2:
-        keyword = st.text_input("搜索图书")
-        if st.button("查询"):
-            st.dataframe(search_book(keyword))
-        st.divider()
-        edit_bid = st.text_input("待修改书号")
-        new_title = st.text_input("新书名")
-        new_author = st.text_input("新作者")
-        new_cid = st.text_input("新分类")
-        new_stock = st.number_input("新库存", min_value=0)
-        new_pub = st.text_input("新出版社")
-        if st.button("提交修改"):
-            flag = update_book(edit_bid, new_title, new_author, new_cid, new_stock, new_pub)
-            st.success("修改成功") if flag else st.error("修改失败")
-    with tab3:
-        del_bid = st.text_input("待删除书号")
-        if st.button("删除图书", type="primary"):
-            flag = delete_book(del_bid)
-            st.success("删除成功") if flag else st.error("存在未归还记录，禁止删除")
 
-# F05-F06 读者管理
-elif menu == "读者管理":
-    st.subheader("读者管理")
-    tab1, tab2 = st.tabs(["新增读者F05", "查询/删除读者F06"])
-    with tab1:
-        rid = st.text_input("读者学号")
-        name = st.text_input("姓名")
-        cls = st.text_input("班级")
-        phone = st.text_input("手机号")
-        if st.button("新增读者"):
-            flag = add_reader(rid, name, cls, phone)
-            st.success("新增成功") if flag else st.error("学号重复")
-    with tab2:
-        key = st.text_input("搜索读者")
-        if st.button("查询"):
-            st.dataframe(search_reader(key))
-        st.divider()
-        del_rid = st.text_input("待删除学号")
-        if st.button("删除读者", type="primary"):
-            flag = delete_reader(del_rid)
-            st.success("删除成功") if flag else st.error("该读者有未归还图书")
+# ========== 图书操作 ==========
+def add_book(book_id, title, author, category_id, stock, publisher):
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        sql = """INSERT INTO books(book_id, title, author, category_id, stock, publisher)
+                 VALUES (%s, %s, %s, %s, %s, %s)"""
+        cur.execute(sql, (book_id, title, author, category_id, stock, publisher))
+        conn.commit()
+        return True
+    except mysql.connector.IntegrityError:
+        conn.rollback()
+        return False
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
 
-# F07-F08 借还操作
-elif menu == "借还操作":
-    st.subheader("图书借还")
-    tab1, tab2 = st.tabs(["借书F07", "还书F08"])
-    with tab1:
-        b_bid = st.text_input("图书编号")
-        b_rid = st.text_input("读者学号")
-        if st.button("办理借书"):
-            ok, msg = borrow_book(b_bid, b_rid)
-            st.success(msg) if ok else st.error(msg)
-    with tab2:
-        rec_id = st.number_input("借阅记录ID", min_value=1)
-        if st.button("办理还书"):
-            ok, msg = return_book(rec_id)
-            st.success(msg) if ok else st.error(msg)
 
-# F09-F11 数据统计
-elif menu == "数据统计":
-    st.subheader("数据统计")
-    # F09 未归还总数
-    total = get_borrow_count()
-    st.metric("当前未归还图书总数", total)
-    st.divider()
-    # F10 分类库存统计
-    st.write("各分类库存统计F10")
-    st.dataframe(stock_by_category())
-    st.divider()
-    # F11 借阅排行榜TOP5
-    st.write("图书借阅排行榜F11")
-    st.dataframe(get_book_ranking())
+def search_book(keyword):
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        sql = """SELECT b.*, c.category_name FROM books b
+                 LEFT JOIN category c ON b.category_id = c.category_id
+                 WHERE b.title LIKE %s OR b.author LIKE %s"""
+        cur.execute(sql, (f"%{keyword}%", f"%{keyword}%"))
+        result = cur.fetchall()
+        return result
+    finally:
+        conn.close()
+
+
+def update_book(book_id, title, author, category_id, stock, publisher):
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        sql = """UPDATE books SET title=%s, author=%s, category_id=%s, stock=%s, publisher=%s
+                 WHERE book_id=%s"""
+        cur.execute(sql, (title, author, category_id, stock, publisher, book_id))
+        conn.commit()
+        return cur.rowcount > 0
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def delete_book(book_id):
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT COUNT(*) cnt FROM borrow_records WHERE book_id=%s AND status=0", (book_id,))
+        if cur.fetchone()["cnt"] > 0:
+            return False
+        cur.execute("DELETE FROM books WHERE book_id=%s", (book_id,))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+# ========== 读者操作 ==========
+def add_reader(reader_id, name, class_name, phone):
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        sql = """INSERT INTO readers(reader_id, name, class_name, phone)
+                 VALUES (%s, %s, %s, %s)"""
+        cur.execute(sql, (reader_id, name, class_name, phone))
+        conn.commit()
+        return True
+    except mysql.connector.IntegrityError:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def search_reader(keyword):
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        sql = """SELECT * FROM readers
+                 WHERE reader_id LIKE %s OR name LIKE %s OR class_name LIKE %s"""
+        cur.execute(sql, (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%"))
+        return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def delete_reader(reader_id):
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT COUNT(*) cnt FROM borrow_records WHERE reader_id=%s AND status=0", (reader_id,))
+        if cur.fetchone()["cnt"] > 0:
+            return False
+        cur.execute("DELETE FROM readers WHERE reader_id=%s", (reader_id,))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+# ========== 借还书 ==========
+def borrow_book(book_id, reader_id):
+    conn = get_db_conn()
+    try:
+        conn.autocommit = False
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT stock FROM books WHERE book_id=%s", (book_id,))
+        book = cur.fetchone()
+        if not book or book["stock"] <= 0:
+            return False, "库存不足，无法借阅"
+        borrow_date = datetime.now().date()
+        due_date = borrow_date + timedelta(days=30)
+        cur.execute("""INSERT INTO borrow_records(book_id, reader_id, borrow_date, due_date, status)
+                       VALUES (%s, %s, %s, %s, 0)""", (book_id, reader_id, borrow_date, due_date))
+        cur.execute("UPDATE books SET stock = stock - 1 WHERE book_id=%s", (book_id,))
+        conn.commit()
+        return True, f"借阅成功，应于{due_date}前归还"
+    except Exception as e:
+        conn.rollback()
+        return False, f"借阅失败：{str(e)}"
+    finally:
+        conn.close()
+
+
+def return_book(record_id):
+    conn = get_db_conn()
+    try:
+        conn.autocommit = False
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT book_id, status FROM borrow_records WHERE record_id=%s", (record_id,))
+        record = cur.fetchone()
+        if not record:
+            return False, "无此借阅记录"
+        if record["status"] == 1:
+            return False, "该书已归还，无需重复操作"
+        cur.execute("""UPDATE borrow_records SET return_date=%s, status=1 WHERE record_id=%s""",
+                    (datetime.now().date(), record_id))
+        cur.execute("UPDATE books SET stock = stock + 1 WHERE book_id=%s", (record["book_id"],))
+        conn.commit()
+        return True, "还书成功，库存已更新"
+    except Exception as e:
+        conn.rollback()
+        return False, f"还书失败：{str(e)}"
+    finally:
+        conn.close()
+
+
+# ========== 统计函数 ==========
+def get_borrow_count():
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT COUNT(*) total FROM borrow_records WHERE status=0")
+        return cur.fetchone()["total"]
+    finally:
+        conn.close()
+
+
+def stock_by_category():
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        sql = """SELECT c.category_name, SUM(b.stock) total_stock
+                 FROM category c LEFT JOIN books b ON c.category_id = b.category_id
+                 GROUP BY c.category_id, c.category_name"""
+        cur.execute(sql)
+        return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def get_book_ranking():
+    conn = get_db_conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        sql = """SELECT b.book_id, b.title, COUNT(br.record_id) borrow_times
+                 FROM borrow_records br
+                 LEFT JOIN books b ON br.book_id = b.book_id
+                 GROUP BY br.book_id, b.title
+                 ORDER BY borrow_times DESC LIMIT 5"""
+        cur.execute(sql)
+        return cur.fetchall()
+    finally:
+        conn.close()
