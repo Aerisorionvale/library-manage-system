@@ -50,41 +50,46 @@ if menu == "图书管理":
                 conn.close()
 
     # 新增图书
-    with tab_add:
+        with tab_add:
         st.subheader("添加新图书")
         conn, cur = get_cursor()
+        cate_dict = {}
         try:
             c_sql = "SELECT category_id,category_name FROM category"
             cur.execute(c_sql)
             cate_list = cur.fetchall()
-            cate_dict = {i[1]: i[0] for i in cate_list}
+            if cate_list:
+                cate_dict = {i[1]: i[0] for i in cate_list}
         finally:
             cur.close()
             conn.close()
 
-        cate_name = st.selectbox("图书分类", list(cate_dict.keys()))
-        book_id = st.text_input("图书编号")
-        title = st.text_input("图书名称")
-        author = st.text_input("作者")
-        stock = st.number_input("库存数量", min_value=1, value=1)
-        pub = st.text_input("出版社")
-        if st.button("提交新增"):
-            conn, cur = get_cursor()
-            try:
-                cid = cate_dict[cate_name]
-                insert_sql = """
-                INSERT INTO books(book_id,title,author,category_id,stock,publisher)
-                VALUES(%s,%s,%s,%s,%s,%s)
-                """
-                cur.execute(insert_sql, (book_id, title, author, cid, stock, pub))
-                conn.commit()
-                st.success("图书新增成功！")
-            except Exception as e:
-                conn.rollback()
-                st.error(f"新增失败：{e}")
-            finally:
-                cur.close()
-                conn.close()
+        if not cate_dict:
+            st.warning("暂无图书分类，请先在数据库添加分类数据！")
+        else:
+            cate_name = st.selectbox("图书分类", list(cate_dict.keys()))
+            book_id = st.text_input("图书编号")
+            title = st.text_input("图书名称")
+            author = st.text_input("作者")
+            stock = st.number_input("库存数量", min_value=1, value=1)
+            pub = st.text_input("出版社")
+            if st.button("提交新增"):
+                conn, cur = get_cursor()
+                try:
+                    cid = cate_dict[cate_name]
+                    insert_sql = """
+                    INSERT INTO books(book_id,title,author,category_id,stock,publisher)
+                    VALUES(%s,%s,%s,%s,%s,%s)
+                    """
+                    cur.execute(insert_sql, (book_id, title, author, cid, stock, pub))
+                    conn.commit()
+                    st.success("图书新增成功！")
+                except Exception as e:
+                    conn.rollback()
+                    st.error(f"新增失败：{e}")
+                finally:
+                    cur.close()
+                    conn.close()
 
 # ========== 2.读者管理（修复表字段不匹配bug） ==========
 elif menu == "读者管理":
