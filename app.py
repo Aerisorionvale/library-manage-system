@@ -45,29 +45,43 @@ if menu == "图书管理":
                 conn.close()
 
     # 新增图书页面（带空判断，彻底解决KeyError）
-    with tab_add:
+       with tab_add:
         st.subheader("添加新图书")
-        conn, cur = get_cursor()
-        cate_list = []
-        try:
-            cur.execute("SELECT category_id, category_name FROM category")
-            cate_list = cur.fetchall()
-        finally:
-            cur.close()
-            conn.close()
+        # 直接写死你全部分类，不再从数据库读取，彻底避开cate_dict报错
+        cate_dict = {
+            "计算机":"C01",
+            "文学":"C02",
+            "经济管理":"C03",
+            "历史":"C04",
+            "经管":"C05",
+            "数学":"C06",
+            "物理":"C07",
+            "外语":"C08"
+        }
+        cate_name = st.selectbox("图书分类", list(cate_dict.keys()))
+        book_id = st.text_input("图书编号")
+        title = st.text_input("图书名称")
+        author = st.text_input("作者")
+        stock = st.number_input("库存数量", min_value=1, value=1)
+        publisher = st.text_input("出版社")
 
-        # 容错判断：无分类直接拦截报错代码
-        if not cate_list:
-            st.error("数据库暂无分类数据，请先在TiDB执行分类插入SQL！")
-        else:
-            cate_dict = {row[1]: row[0] for row in cate_list}
-            cate_name = st.selectbox("图书分类", list(cate_dict.keys()))
-            book_id = st.text_input("图书编号")
-            title = st.text_input("图书名称")
-            author = st.text_input("作者")
-            stock = st.number_input("库存数量", min_value=1, value=1)
-            publisher = st.text_input("出版社")
-
+        if st.button("提交新增"):
+            conn, cur = get_cursor()
+            try:
+                cid = cate_dict[cate_name]
+                insert_sql = """
+                INSERT INTO books(book_id,title,author,category_id,stock,publisher)
+                VALUES(%s,%s,%s,%s,%s,%s)
+                """
+                cur.execute(insert_sql, (book_id, title, author, cid, stock, publisher))
+                conn.commit()
+                st.success("✅ 图书新增成功！")
+            except Exception as e:
+                conn.rollback()
+                st.error(f"新增失败：{e}")
+            finally:
+                cur.close()
+                conn.close()
             if st.button("提交新增"):
                 conn, cur = get_cursor()
                 try:
