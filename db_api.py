@@ -11,8 +11,7 @@ def get_db_conn():
         database=st.secrets["TIDB_DATABASE"],
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
-        ssl=True  
-    )
+        ssl={"ca": None})
     return conn
 
 # ========== 图书模块 F01-F04 ==========
